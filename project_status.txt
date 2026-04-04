@@ -1,0 +1,24 @@
+WHAT WE HAVE (v2.0):
+- Camera input & video frame extraction (`open_camera.py`) — UNCHANGED.
+- Hand tracking & skeletal landmark extraction using MediaPipe (`hand_detection.py`) — UNCHANGED.
+- Gesture recognition engine with new interaction flow: left-hand point → fist lock → right-hand circle dial → clap confirm (`gesture_engine.py`) — REWRITTEN.
+- On-screen AR color picker UI with circular color wheel, state indicator, bulb glow effects (`color_picker_ui.py`) — REWRITTEN.
+- State machine main loop: IDLE → AIMING → LOCKED → DIALING → CONFIRMED (`main.py`) — REWRITTEN.
+- Tuya Cloud API bulb controller replacing Google Home API (`bulb_controller.py`) — REWRITTEN.
+- Tuya device configuration (`bulbs.json`) — REWRITTEN.
+
+WHAT WE DID:
+- Ripped out the Google Home API scaffolding (was never functional).
+- Replaced with Tuya Cloud API via tinytuya library.
+- Redesigned the gesture flow from slider-based to a natural point → lock → dial → confirm interaction.
+- Added circular motion detection for color dialing.
+- Added clap detection for color confirmation.
+- Added left/right hand differentiation for the new gesture flow.
+- Added real-time live color preview on the actual bulb during dialing.
+
+SETUP REQUIRED:
+1. pip install -r requirements.txt
+2. Create a Tuya IoT developer account at iot.tuya.com
+3. Link your Smart Life app account to the Tuya developer project
+4. Fill in bulbs.json with your Access ID, Access Secret, and Device IDs
+5. Run: python main.py

@@ -1,0 +1,11 @@
+{
+  "tuya": {
+    "access_id": "uf37cwm7w3vk457n3sy8",
+    "access_secret": "f30eff4ad3914ecdb8656390d72c238a",
+    "region": "us"
+  },
+  "devices": {
+    "WB1": {"device_id": "ebb828f8eb324171a3ogyt"}
+
+  }
+}
