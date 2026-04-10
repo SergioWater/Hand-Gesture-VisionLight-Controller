@@ -302,7 +302,7 @@ def main():
 
     print("[main] All systems initialised. Starting capture loop…")
     print("[main] Press Q to quit, R to reset.\n")
-
+    
     try:
         while True:
             # ---------------------------------------------------------------
@@ -372,7 +372,7 @@ def main():
         cam.cap.release()
         cv.destroyAllWindows()
         print("[main] Goodbye.")
-
+    print(hands_data[0]["landmarks"][:5])  # first 5 landmarks (wrist + thumb chain)
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,7 @@ import cv2 as cv
 
 
 class Camera:
-    def __init__(self, device_index=1):
+    def __init__(self, device_index=0):
         self.cap = cv.VideoCapture(device_index)
         if not self.cap.isOpened():
             # Fallback to default camera

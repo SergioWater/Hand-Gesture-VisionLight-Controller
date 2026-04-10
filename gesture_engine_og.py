@@ -3,46 +3,36 @@ gesture_engine.py
 -----------------
 Stateless gesture recogniser for the Hand Gesture Light Controller.
 
-
 Responsibilities (per-frame):
   - Detect COLOR_DIAL  : right hand moving in a circle; maps current angle → hue
   - Detect DOUBLE_CLAP : two claps within a short window → toggle on/off
   - Detect BOTH_FISTS  : both hands raised with fists closed → confirm color
-  - Detect CAMERA_ON   : thumb only extended (all other fingers folded) → turn camera on
-  - Detect CAMERA_OFF  : index + pinky extended (middle & ring folded) → turn camera off
-
 
 This module does NOT own the IDLE→DIALING→CONFIRMED state machine.
 That logic lives in main.py.  Here we only report what we see right now.
-
 
 Usage:
     engine = GestureEngine(frame_width=640, frame_height=480)
     result = engine.recognize(hands_data)
     # result is a dict – see recognize() docstring for schema
 
-
 Depends on hand_detection.py (HandDetection helper class).
 Frame is expected to already be flipped/mirrored, so MediaPipe's "Left"
 label corresponds to the user's physical left hand.
 """
 
-
 import math
 import collections
 from hand_detection import HandDetection as HD
-
 
 # ---------------------------------------------------------------------------
 # Tuning constants – adjust without touching algorithm logic
 # ---------------------------------------------------------------------------
 
-
 # Circular-motion tracking
 _CIRCLE_WINDOW      = 15    # rolling deque length for right-hand positions
 _CIRCLE_MIN_RADIUS  = 20    # minimum mean-radius (px) to consider "circular"
 _CIRCLE_MIN_POINTS  = 5    # need at least this many points before analysing
-
 
 # Clap detection
 _CLAP_FAR_DIST      = 200   # wrist distance (px) considered "hands apart"
@@ -50,36 +40,26 @@ _CLAP_NEAR_DIST     = 80    # wrist distance (px) considered "clapped"
 _CLAP_WINDOW        = 10    # frames within which the transition must happen
 _CLAP_COOLDOWN      = 20    # frames to ignore clap after one is fired
 
-
 # Double-clap detection: two individual claps must occur within this window.
 _DOUBLE_CLAP_WINDOW = 20    # ~0.67s at 30 fps
-
 
 # Fist detection: all four non-thumb fingers must be folded.
 # Allow 0 extended fingers for a strict fist.  Using 0 here avoids
 # ambiguity with a 1-finger point being mis-classified as a fist.
 _FIST_MAX_EXTENDED  = 0     # zero fingers extended = closed fist
 
-
 # Global gesture cooldown – after any gesture fires (except COLOR_DIAL),
 # suppress new gestures for this many frames to prevent rapid re-triggers.
 _GESTURE_COOLDOWN   = 15
 
-
 # BOTH_FISTS cooldown – prevents rapid confirm.
 _BOTH_FISTS_COOLDOWN = 3
-
-
-# Camera gesture cooldown – prevents rapid on/off toggling.
-_CAMERA_GESTURE_COOLDOWN = 20
-
 
 
 class GestureEngine:
     """
     Per-frame gesture recogniser.  Instantiate once; call recognize() every frame.
     """
-
 
     def __init__(self, frame_width: int = 640, frame_height: int = 480):
         """
@@ -91,7 +71,6 @@ class GestureEngine:
         self.frame_width  = frame_width
         self.frame_height = frame_height
 
-
         # --- Circular motion state ---
         # Rolling window of (x, y) positions for the right hand's index tip
         self._circle_positions: collections.deque = collections.deque(
@@ -99,7 +78,6 @@ class GestureEngine:
         )
         # Last computed hue so we can return a stable value even mid-rotation
         self._last_hue: float = 0.0
-
 
         # --- Clap detection state ---
         # Rolling window of recent inter-wrist distances (one value per frame)
@@ -109,37 +87,27 @@ class GestureEngine:
         # Cooldown counter; when > 0 we don't fire another clap
         self._clap_cooldown: int = 0
 
-
         # --- Double-clap detection state ---
         # True when we've seen one clap and are waiting for the second
         self._pending_clap: bool = False
         # Frames remaining in the double-clap window
         self._pending_clap_timer: int = 0
 
-
         # --- Global gesture cooldown ---
         # When > 0, suppress all gestures except COLOR_DIAL
         self._gesture_cooldown: int = 0
-
 
         # --- BOTH_FISTS cooldown ---
         # Separate cooldown to prevent rapid confirm
         self._both_fists_cooldown: int = 0
 
-
-        # --- Camera gesture cooldown ---
-        self._camera_cooldown: int = 0
-
-
     # -----------------------------------------------------------------------
     # Public API
     # -----------------------------------------------------------------------
 
-
     def recognize(self, hands_data: list) -> dict:
         """
         Analyse one frame's worth of hand-detection data and return a gesture dict.
-
 
         Parameters
         ----------
@@ -150,11 +118,10 @@ class GestureEngine:
               "handedness"  – "Left" or "Right"
                               (already corrected for mirror flip in main.py)
 
-
         Returns
         -------
         dict with keys:
-          "gesture"         – str  : "NONE" | "COLOR_DIAL" | "DOUBLE_CLAP" | "BOTH_FISTS" | "CAMERA_ON" | "CAMERA_OFF"
+          "gesture"         – str  : "NONE" | "COLOR_DIAL" | "DOUBLE_CLAP" | "BOTH_FISTS"
           "dial_hue"        – float or None   : 0.0–1.0 from circular motion
           "dial_active"     – bool            : True when circle detected
         """
@@ -173,8 +140,6 @@ class GestureEngine:
                 self._gesture_cooldown -= 1
             if self._both_fists_cooldown > 0:
                 self._both_fists_cooldown -= 1
-            if self._camera_cooldown > 0:
-                self._camera_cooldown -= 1
             # Tick pending-clap timer even with no hands visible
             if self._pending_clap and self._pending_clap_timer > 0:
                 self._pending_clap_timer -= 1
@@ -182,11 +147,9 @@ class GestureEngine:
                     self._pending_clap = False  # window expired, discard
             return result
 
-
         # Separate hands by handedness
         left_hand  = self._get_hand(hands_data, "Left")
         right_hand = self._get_hand(hands_data, "Right")
-
 
         # Tick down cooldowns each frame
         if self._clap_cooldown > 0:
@@ -195,16 +158,12 @@ class GestureEngine:
             self._gesture_cooldown -= 1
         if self._both_fists_cooldown > 0:
             self._both_fists_cooldown -= 1
-        if self._camera_cooldown > 0:
-            self._camera_cooldown -= 1
-
 
         # Tick pending-clap timer
         if self._pending_clap and self._pending_clap_timer > 0:
             self._pending_clap_timer -= 1
             if self._pending_clap_timer == 0:
                 self._pending_clap = False  # window expired, discard
-
 
         # ------------------------------------------------------------------
         # 1. Double-clap detection (highest priority)
@@ -231,7 +190,6 @@ class GestureEngine:
             # If one hand disappears, reset clap history to avoid false trigger
             self._clap_dist_history.clear()
 
-
         # ------------------------------------------------------------------
         # 2. BOTH_FISTS detection (both hands raised with closed fists)
         #    Has its own cooldown; also respects global cooldown.
@@ -244,30 +202,8 @@ class GestureEngine:
                 self._gesture_cooldown = _GESTURE_COOLDOWN
                 return result
 
-
         # ------------------------------------------------------------------
-        # 3. Camera gestures (single-hand, either hand)
-        #    CAMERA_ON  = thumb only (fist with thumb out)
-        #    CAMERA_OFF = index + pinky up ("rock" / horn sign)
-        #    Has its own cooldown; also respects global cooldown.
-        # ------------------------------------------------------------------
-        if self._camera_cooldown == 0 and self._gesture_cooldown == 0:
-            for hand in hands_data:
-                lm = hand["landmarks"]
-                if self._is_thumb_only(lm):
-                    result["gesture"] = "CAMERA_ON"
-                    self._camera_cooldown = _CAMERA_GESTURE_COOLDOWN
-                    self._gesture_cooldown = _GESTURE_COOLDOWN
-                    return result
-                if self._is_index_pinky_only(lm):
-                    result["gesture"] = "CAMERA_OFF"
-                    self._camera_cooldown = _CAMERA_GESTURE_COOLDOWN
-                    self._gesture_cooldown = _GESTURE_COOLDOWN
-                    return result
-
-
-        # ------------------------------------------------------------------
-        # 4. Right-hand COLOR_DIAL (circular motion + hue)
+        # 3. Right-hand COLOR_DIAL (circular motion + hue)
         #    COLOR_DIAL is exempt from the global gesture cooldown.
         # ------------------------------------------------------------------
         if right_hand:
@@ -281,21 +217,17 @@ class GestureEngine:
             # but do trim it so stale positions don't pollute a fresh appearance
             self._circle_positions.clear()
 
-
         # ------------------------------------------------------------------
         # Global cooldown gate: suppress non-exempt gestures
         # ------------------------------------------------------------------
         if self._gesture_cooldown > 0 and result["gesture"] not in ("COLOR_DIAL", "DOUBLE_CLAP", "NONE"):
             result["gesture"] = "NONE"
 
-
         return result
-
 
     # -----------------------------------------------------------------------
     # Gesture helpers
     # -----------------------------------------------------------------------
-
 
     def _count_extended(self, landmarks: list) -> int:
         """
@@ -313,48 +245,12 @@ class GestureEngine:
             if HD.is_finger_extended(landmarks, tip, pip)
         )
 
-
     def _is_fist(self, landmarks: list) -> bool:
         """
         Returns True when at most _FIST_MAX_EXTENDED fingers are extended
         (a closed fist may still have one finger slightly above threshold).
         """
         return self._count_extended(landmarks) <= _FIST_MAX_EXTENDED
-
-
-    def _is_thumb_only(self, landmarks: list) -> bool:
-        """
-        Thumb tip is positionally above ALL four other fingertips.
-        Pinky must be below thumb (i.e. folded down). → CAMERA_ON
-        """
-        thumb_y  = landmarks[HD.THUMB_TIP][1]
-        index_y  = landmarks[HD.INDEX_TIP][1]
-        middle_y = landmarks[HD.MIDDLE_TIP][1]
-        ring_y   = landmarks[HD.RING_TIP][1]
-        pinky_y  = landmarks[HD.PINKY_TIP][1]
-
-        return (thumb_y < index_y and thumb_y < middle_y
-                and thumb_y < ring_y and thumb_y < pinky_y)
-
-
-    def _is_index_pinky_only(self, landmarks: list) -> bool:
-        """
-        Both thumb AND pinky tips are positionally above index, middle,
-        and ring fingertips. → CAMERA_OFF
-        """
-        thumb_y  = landmarks[HD.THUMB_TIP][1]
-        index_y  = landmarks[HD.INDEX_TIP][1]
-        middle_y = landmarks[HD.MIDDLE_TIP][1]
-        ring_y   = landmarks[HD.RING_TIP][1]
-        pinky_y  = landmarks[HD.PINKY_TIP][1]
-
-        thumb_above = (thumb_y < index_y and thumb_y < middle_y
-                    and thumb_y < ring_y)
-        pinky_above = (pinky_y < index_y and pinky_y < middle_y
-                    and pinky_y < ring_y)
-
-        return thumb_above and pinky_above
-
 
     def _is_both_fists_raised(self, left_lm: list, right_lm: list) -> bool:
         """
@@ -368,17 +264,14 @@ class GestureEngine:
         right_wrist_y = right_lm[HD.WRIST][1]
         return left_wrist_y < half_h and right_wrist_y < half_h
 
-
     # -----------------------------------------------------------------------
     # Circular motion / hue dial
     # -----------------------------------------------------------------------
-
 
     def _update_circle(self, landmarks: list) -> tuple:
         """
         Push the right hand's index-tip position into the rolling buffer and
         compute the current circular-motion state.
-
 
         Returns
         -------
@@ -389,16 +282,13 @@ class GestureEngine:
         tip = landmarks[HD.INDEX_TIP]
         self._circle_positions.append(tip)
 
-
         n = len(self._circle_positions)
         if n < _CIRCLE_MIN_POINTS:
             return self._last_hue, False
 
-
         # Centroid of the rolling window
         cx = sum(p[0] for p in self._circle_positions) / n
         cy = sum(p[1] for p in self._circle_positions) / n
-
 
         # Mean radius – if the hand isn't really moving in a circle this is tiny
         radii = [
@@ -407,34 +297,27 @@ class GestureEngine:
         ]
         mean_radius = sum(radii) / len(radii)
 
-
         dial_active = mean_radius >= _CIRCLE_MIN_RADIUS
-
 
         # Current angle of the latest tip position relative to centroid
         latest = self._circle_positions[-1]
         angle  = math.atan2(latest[1] - cy, latest[0] - cx)  # –π … +π
 
-
         # Normalise to 0.0–1.0 hue
         hue = (angle + math.pi) / (2 * math.pi)   # 0.0 at –π, 1.0 at +π
         hue = max(0.0, min(1.0, hue))              # clamp for safety
 
-
         self._last_hue = hue
         return hue, dial_active
-
 
     # -----------------------------------------------------------------------
     # Clap detection
     # -----------------------------------------------------------------------
 
-
     def _update_clap(self, left_lm: list, right_lm: list) -> bool:
         """
         Append the current inter-wrist distance to the history buffer and
         check whether a clap transition (far→near within the window) occurred.
-
 
         Returns True exactly once per clap event (then starts cooldown).
         """
@@ -444,15 +327,12 @@ class GestureEngine:
             self._clap_dist_history.append(dist)
             return False
 
-
         dist = HD.distance(left_lm[HD.WRIST], right_lm[HD.WRIST])
         self._clap_dist_history.append(dist)
-
 
         history = list(self._clap_dist_history)
         if len(history) < 2:
             return False
-
 
         # A clap is: the earliest sample in the window was far, and the
         # latest sample is near.  We require at least one "far" reading
@@ -461,20 +341,16 @@ class GestureEngine:
         recent_near = history[-1] < _CLAP_NEAR_DIST
         had_far     = any(d > _CLAP_FAR_DIST for d in history[:-1])
 
-
         if recent_near and had_far:
             self._clap_cooldown = _CLAP_COOLDOWN
             self._clap_dist_history.clear()   # reset so no double-fire
             return True
 
-
         return False
-
 
     # -----------------------------------------------------------------------
     # Internal utility
     # -----------------------------------------------------------------------
-
 
     @staticmethod
     def _get_hand(hands_data: list, handedness: str) -> dict | None:
